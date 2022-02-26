@@ -1,0 +1,102 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>One WEIRD Trick for Speeding Up ORDER BY That You Probably Shouldn't Use &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h2 class=nav-title>Cassidy Scheffer</h2>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=post>
+<div class=post-info>
+<span>Written by</span>
+Cassidy Scheffer
+<br>
+<span>on&nbsp;</span><time datetime="2021-04-09 10:36:39 -0500 -0500">April 9, 2021</time>
+</div>
+<h1 class=post-title>One WEIRD Trick for Speeding Up ORDER BY That You Probably Shouldn't Use</h1>
+<div class=post-line></div>
+<p>I was digging into a performance issue at work recently and found THE WEIRDEST way of speeding up a query that uses <code>ORDER BY</code>. When testing against our replica database, I was getting results up to 100 times faster than before.</p>
+<p>&ldquo;Too good to be true!&rdquo; I thought. Well, it turns out that it is sort of too good to be true.</p>
+<h2 id=the-weird-trick>The WEIRD Trick</h2>
+<p>Here&rsquo;s an example query that was having issues. We&rsquo;re selecting some records and ordering by <code>ID</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sql data-lang=sql><span style=color:#66d9ef>SELECT</span> <span style=color:#f92672>*</span>
+<span style=color:#66d9ef>FROM</span> activities
+<span style=color:#66d9ef>WHERE</span> account_id <span style=color:#66d9ef>IN</span> (<span style=color:#ae81ff>999102</span>,<span style=color:#ae81ff>989987</span>,<span style=color:#ae81ff>809354</span>,<span style=color:#ae81ff>100964</span>)
+<span style=color:#66d9ef>ORDER</span> <span style=color:#66d9ef>BY</span> id <span style=color:#66d9ef>DESC</span>
+<span style=color:#66d9ef>LIMIT</span> <span style=color:#ae81ff>10</span>;
+</code></pre></div><p>Here&rsquo;s an EXPLAIN plan from pganalyze. Look at that! We&rsquo;re spending almost 9 seconds scanning the index for <code>activities.id</code> 😯</p>
+<p><img src=https://dev-to-uploads.s3.amazonaws.com/uploads/articles/2z52rggspkpv5b48fk9b.png alt="A pganalyze EXPLAIN plan showing an index scan to order the records took 8,936 ms"></p>
+<p>This was baffling to me! We&rsquo;re using an index, why is this slow?!</p>
+<p>As any good developer does, I went digging in Stack Overflow for answers. Unfortunately, I can&rsquo;t find the original answer I was looking at, but someone had suggested adding <code>+ 0</code> to the <code>ORDER BY</code> clause.</p>
+<p>WHAT?! So I tried it.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sql data-lang=sql><span style=color:#66d9ef>EXPLAIN</span> ANALYSELECT <span style=color:#f92672>*</span>
+<span style=color:#66d9ef>FROM</span> activities
+<span style=color:#66d9ef>WHERE</span> account_id <span style=color:#66d9ef>IN</span> (<span style=color:#ae81ff>999102</span>,<span style=color:#ae81ff>989987</span>,<span style=color:#ae81ff>809354</span>,<span style=color:#ae81ff>100964</span>)
+<span style=color:#66d9ef>ORDER</span> <span style=color:#66d9ef>BY</span> id <span style=color:#f92672>+</span> <span style=color:#ae81ff>0</span> <span style=color:#66d9ef>DESC</span>
+<span style=color:#66d9ef>LIMIT</span> <span style=color:#ae81ff>10</span>;
+</code></pre></div><pre tabindex=0><code>Limit (cost=32383.82..32383.84 rows=8 width=149) (actual time=71.250..71.252 rows=8 loops=1)
+  -&gt; Sort (cost=32383.82..32410.22 rows=10557 width=149 (actual time=71.249..71.250 rows=8 loops=1)
+    Sort Key: ((id + 0)) DESC
+    Sort Method: top-N heapsort Memory: 26kB
+    -&gt; Index Scan using index_activities_on_account_user_id on activities (cost=0.57..32172.68 rows=10557 width=149) (actual time=2.292..71.154 rows=132 loops=1)
+      Index Cond: (account_user_id = ANY ('{999102,989987,809354,100964}'::integer[]))
+Planning Time: 0.122 ms
+Execution Time: 71.279 ms
+</code></pre><p>🤯 71.279 ms!!!!!</p>
+<h2 id=what-in-the-actual-is-happening-here>What in the ACTUAL is happening here?</h2>
+<p>Well, first, you should know that this table is pretty big. There are just under 100,000,000 records in it. AND, you should know that in some cases, this query can return LOTS of records without the <code>LIMIT</code> in there. In the EXPLAIN plan screen shot above, you can see that the query found just under 9,000 records, but couldn&rsquo;t apply the <code>LIMIT</code> until they were sorted.</p>
+<p>Another thing to know here is that this table is <em>busy</em>. We add almost 1,000,000 records in a day. Which means that those 9,000 records have IDs that are pretty far apart. There are big gaps between the numbers returned in the <code>ID</code> column.</p>
+<p>Imagine this query returned 100 records, but the IDs were more than 100 apart. E.g., IDS 100, 200, 300&mldr;etc. When postgres is trying to sort these records it does a reverse scan through the index and has to read the order of EVERY number including the ones not returned by the query.</p>
+<p>So what is this magic <code>+ 0</code> doing? Adding <code>+ 0</code> to the <code>ORDER BY</code> clause forces Postgres to load the records into memory and sort them without the index, which is way faster. You can see in the explain plan above, that the sort in memory was super fast.</p>
+<h2 id=why-you-_probably_-shouldnt-do-this-in-production>Why You <em>Probably</em> Shouldn&rsquo;t Do This in Production</h2>
+<p>This really depends on your data. I knew that only a small percentage of users were experiencing <em>really</em> slow requests due to this query, but I didn&rsquo;t know what the impact of the <code>+ 0 </code> magic would be on users that have fewer <code>activities</code> records. So I ran an experiment using <a href=https://github.com/github/scientist>GitHub&rsquo;s Scientist gem</a>.</p>
+<p>The results of the experiment are still coming in, but so far, the original <code>ORDER BY</code> is almost tied with <code>ORDER BY id + 0</code> for average execution time. However, the 95 percentile execution time (meaning 5% of queries are slower than this number), are way out of sync! <code>ORDER BY id + 0</code> is almost twice as slow in the 95 percentile category.</p>
+<p>The results of the experiment tell me that overall, <code>ORDER BY</code> with an index scan might cause timeouts for <em>some</em> users, but <code>ORDER BY id + 0</code> with no index scan seems to cause slower queries overall for most users.</p>
+<p>Looks like I&rsquo;m going to have to find a different solution to this problem.</p>
+<h2 id=conclusion>Conclusion</h2>
+<p>Adding <code>+ 0</code> to your <code>ORDER BY id</code> is a wacky trick that will speed up queries when the index is HUGE and the IDs returned have big intervals.</p>
+<p>However, it won&rsquo;t <em>always</em> work. Indexes are still fast! Test your queries safely in production to make sure that you&rsquo;re not making a worse experience overall to save a few slow queries.</p>
+</div>
+<div class=pagination>
+<a href=/blog/2021-03-29-two-tools-for-diagnosing-slow-endpoints-in-rails/ class="left arrow">&#8592;</a>
+<a href=# class=top>Top</a>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:09.033933976 +0000 UTC m=+0.162679657">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>

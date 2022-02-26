@@ -1,0 +1,75 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Favourite Debugging Trick &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h2 class=nav-title>Cassidy Scheffer</h2>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=post>
+<div class=post-info>
+<span>Written by</span>
+Cassidy Scheffer
+<br>
+<span>on&nbsp;</span><time datetime="2019-08-06 23:37:38 -0400 -0400">August 6, 2019</time>
+</div>
+<h1 class=post-title>Favourite Debugging Trick</h1>
+<div class=post-line></div>
+<p>Last week I wrote about some of my favourite debugging tools in Ruby. I forgot one trick that I find super useful!</p>
+<p>Today I was writing a script that would iterate through objects in an S3 bucket and group these objects by similar names. The naming structure looked like this:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-text data-lang=text>original.jpg
+tumb_original.jpg
+profile_original.jpg
+</code></pre></div><p>So all three of those images should get grouped together because they all come from <code>orignal.jpg</code>. But I got my name comparison muddled and something wasn&rsquo;t working right. It would work perfectly for 200 images then it blew up on the 201st!</p>
+<p>Printing logs or putting a binding in a loop like this is gnarly. I don&rsquo;t want to loop through 200 successful iterations to find what I need!</p>
+<h2 id=conditional-bindings>Conditional Bindings!</h2>
+<p>To solve this problem, I just made my binding conditional.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby>s3_objects<span style=color:#f92672>.</span>each <span style=color:#66d9ef>do</span> <span style=color:#f92672>|</span>img<span style=color:#f92672>|</span>
+  binding<span style=color:#f92672>.</span>pry <span style=color:#66d9ef>if</span> img<span style=color:#f92672>.</span>key <span style=color:#f92672>=~</span> <span style=color:#e6db74>/badfilename.jpg/</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>This time we&rsquo;ll only hit the binding if the image key contains the filename that&rsquo;s giving me grief!</p>
+</div>
+<div class=pagination>
+<a href=/blog/2019-08-03-tmux-colour-theme/ class="left arrow">&#8592;</a>
+<a href=/blog/2019-09-22-go-workshop/ class="right arrow">&#8594;</a>
+<a href=# class=top>Top</a>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:08.984976919 +0000 UTC m=+0.113722600">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>

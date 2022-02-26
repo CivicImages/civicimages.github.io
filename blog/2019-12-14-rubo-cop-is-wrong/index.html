@@ -1,0 +1,104 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=description content="Rubocop autocorrect doesn't always speak Rails!">
+<title>Don't Trust the Cops: Sometimes Rubocop is Wrong &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h2 class=nav-title>Cassidy Scheffer</h2>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=post>
+<div class=post-info>
+<span>Written by</span>
+Cassidy Scheffer
+<br>
+<span>on&nbsp;</span><time datetime="2019-12-14 10:22:00 -0500 -0500">December 14, 2019</time>
+</div>
+<h1 class=post-title>Don't Trust the Cops: Sometimes Rubocop is Wrong</h1>
+<div class=post-line></div>
+<p>My team at work recently upgraded our version of <a href=https://github.com/rubocop-hq/rubocop>Rubocop</a>, the popular linter
+used to enforce good Ruby code style. With the upgrade we got a whole bunch of new suggestions and warnings about style
+violations.</p>
+<p>One of them that tripped us up was the
+<a href=https://github.com/rubocop-hq/rubocop-performance/blob/master/lib/rubocop/cop/performance/count.rb>Performance/Count</a>
+rule.</p>
+<p>According to the Rubocop docs:</p>
+<blockquote>
+<p>This cop is used to identify usages of <code>count</code> on an <code>Enumerable</code> that follow calls to <code>select</code> or <code>reject</code>. Querying
+logic can instead be passed to the <code>count</code> call.</p>
+</blockquote>
+<p>So in plain Ruby, the cop sees that you are filtering an array with <code>select</code> or <code>reject</code> and <em>then</em> calling <code>count</code> on
+it. This is inefficient because <code>count</code> can actually do all this work for you.</p>
+<p>But! What if you&rsquo;re in a Rails project and you have some code that looks like this?</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby>@users<span style=color:#f92672>.</span>select { <span style=color:#f92672>|</span>u<span style=color:#f92672>|</span> u<span style=color:#f92672>.</span>admin? }<span style=color:#f92672>.</span>count
+</code></pre></div><p>Rubocop will autocorrect this to:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby>@users<span style=color:#f92672>.</span>count { <span style=color:#f92672>|</span>u<span style=color:#f92672>|</span> u<span style=color:#f92672>.</span>admin? }
+</code></pre></div><p>Looks okay? Well, this will likely execute a SQL count that ignores the block!!! Rubocop incorrectly assumes that
+<code>@users</code> is an <code>Array</code>. Why else would you be calling <code>select</code> on it, right?</p>
+<p>In our case, though, <code>@users</code> was actually an ActiveRecord object that hadn&rsquo;t been loaded yet! Since ActiveRecord
+lazy-loads things, sending count to this object executes an SQL <code>COUNT</code> that ignores the block passed in!</p>
+<p>Here&rsquo;s what it looks like in action:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>User</span><span style=color:#f92672>.</span>count { <span style=color:#f92672>|</span>u<span style=color:#f92672>|</span> u<span style=color:#f92672>.</span>admin? }
+<span style=color:#75715e># (0.4ms)  SELECT COUNT(*) FROM &#34;users&#34;</span>
+<span style=color:#75715e># =&gt; 320</span>
+<span style=color:#66d9ef>User</span><span style=color:#f92672>.</span>count
+<span style=color:#75715e># (0.6ms)  SELECT COUNT(*) FROM &#34;users&#34;</span>
+<span style=color:#75715e># =&gt; 320</span>
+</code></pre></div><p>See how we got the same number each time here? This is because ActiveRecord ignores the block passed into count without
+raising an error and counts <em>all</em> users!.</p>
+<p>The correct thing to do here is to pass your filter parameters into a <code>where</code> <em>and then</em> do a <code>count</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>User</span><span style=color:#f92672>.</span>where(<span style=color:#e6db74>type</span>: <span style=color:#e6db74>&#39;admin&#39;</span>)<span style=color:#f92672>.</span>count
+<span style=color:#75715e># (0.3ms)  SELECT COUNT(*) FROM &#34;users&#34; WHERE &#34;users&#34;.&#34;type&#34; = $1  [[&#34;type&#34;, &#34;Admin&#34;]]</span>
+<span style=color:#75715e># =&gt; 10</span>
+</code></pre></div><h2 id=tldr>TL;DR</h2>
+<ul>
+<li>ActiveRecord count works like this: <a href=https://devdocs.io/rails~4.2/activerecord/calculations#method-i-count>https://devdocs.io/rails~4.2/activerecord/calculations#method-i-count</a></li>
+<li>Ruby count works like this: <a href=https://devdocs.io/ruby~2.3/enumerable#method-i-count>https://devdocs.io/ruby~2.3/enumerable#method-i-count</a></li>
+<li>These are two different count methods that can be called on objects that look similar.</li>
+<li>Passing a block to an ActiveRecord count will not raise an error, but will return inaccurate results.</li>
+</ul>
+</div>
+<div class=pagination>
+<a href=/blog/2019-09-28-rspec-shared-examples-contexts/ class="left arrow">&#8592;</a>
+<a href=/blog/2020-05-15-factories-refactor-if-statements/ class="right arrow">&#8594;</a>
+<a href=# class=top>Top</a>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:09.008685243 +0000 UTC m=+0.137430924">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>

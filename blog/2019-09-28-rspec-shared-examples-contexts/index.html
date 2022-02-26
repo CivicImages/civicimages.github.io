@@ -1,0 +1,202 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=description content="How to use shared examples and shared contexts in RSpec!">
+<title>Shared Examples and Contexts in RSpec &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h2 class=nav-title>Cassidy Scheffer</h2>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=post>
+<div class=post-info>
+<span>Written by</span>
+Cassidy Scheffer
+<br>
+<span>on&nbsp;</span><time datetime="2019-09-28 12:54:41 -0400 -0400">September 28, 2019</time>
+</div>
+<h1 class=post-title>Shared Examples and Contexts in RSpec</h1>
+<div class=post-line></div>
+<p>When I first learned testing in Rails, I learned <a href=http://rspec.info/>RSpec</a>, but then in my last job, I wrote most of my tests in <a href=https://github.com/seattlerb/minitest>minitest</a>. I enjoyed the challenge of learning a new test framework and found the tests super fast!</p>
+<p>But recently, I&rsquo;ve been working on a project in RSpec again and I have a renewed appreciation for it! In this post, I&rsquo;m going to talk about how to define and use shared examples and shared contexts in RSpec.</p>
+<p>I&rsquo;m going to start with shared examples here because shared contexts are very similar in how you set them up.</p>
+<h2 id=shared-examples>Shared Examples</h2>
+<p>Shared examples are a set of examples that you want to use in multiple files. You&rsquo;ll want to use shared examples when you&rsquo;re writing a Module or a <a href=https://api.rubyonrails.org/classes/ActiveSupport/Concern.html>Concern</a> in Rails.</p>
+<p>In this example below, we have two models, <code>Door</code> and <code>Phone</code>, and they both can be locked. When we lock one of these things, we set an attribute on the model called <code>locked_at</code>, which is a timestamp of when the item was locked.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># app/models/door.rb</span>
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Door</span> <span style=color:#f92672>&lt;</span> <span style=color:#66d9ef>ApplicationRecord</span>
+  <span style=color:#66d9ef>include</span> <span style=color:#66d9ef>Lockable</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#75715e># app/models/phone.rb</span>
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Phone</span> <span style=color:#f92672>&lt;</span> <span style=color:#66d9ef>ApplicationRecord</span>
+  <span style=color:#66d9ef>include</span> <span style=color:#66d9ef>Lockable</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#75715e># app/models/concerns/lockable.rb</span>
+<span style=color:#66d9ef>module</span> Lockable
+  <span style=color:#66d9ef>extend</span> <span style=color:#66d9ef>ActiveSupport</span><span style=color:#f92672>::</span><span style=color:#66d9ef>Concern</span>
+
+  included <span style=color:#66d9ef>do</span>
+    scope <span style=color:#e6db74>:locked</span>, <span style=color:#f92672>-&gt;</span> { where<span style=color:#f92672>.</span>not(<span style=color:#e6db74>locked_at</span>: <span style=color:#66d9ef>nil</span>)  }
+    scope <span style=color:#e6db74>:locked_between</span>, (start_time, end_time)<span style=color:#f92672>-&gt;</span> { where(<span style=color:#e6db74>locked_at</span>: start_time<span style=color:#f92672>..</span>end_time)  }
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>lock!</span>
+    update <span style=color:#e6db74>locked_at</span>: <span style=color:#66d9ef>Time</span><span style=color:#f92672>.</span>zone<span style=color:#f92672>.</span>now
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>You can see here that both models share some functionality through the <code>Lockable</code> module. This module lets us lock items and find all items that are locked.</p>
+<p>Our tests can then be set up like this:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># spec/models/door_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>describe <span style=color:#66d9ef>Door</span>, <span style=color:#e6db74>type</span>: <span style=color:#e6db74>:model</span> <span style=color:#66d9ef>do</span>
+  it_behaves_like <span style=color:#e6db74>&#39;Lockable&#39;</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#75715e># spec/models/phone_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>describe <span style=color:#66d9ef>Phone</span>, <span style=color:#e6db74>type</span>: <span style=color:#e6db74>:model</span> <span style=color:#66d9ef>do</span>
+  it_behaves_like <span style=color:#e6db74>&#39;Lockable&#39;</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#75715e># spec/support/shared_examples/lockable_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>shared_examples <span style=color:#e6db74>&#39;Lockable&#39;</span> <span style=color:#66d9ef>do</span>
+  subject { described_class<span style=color:#f92672>.</span>create }
+
+  describe <span style=color:#e6db74>&#39;#lock&#39;</span> <span style=color:#66d9ef>do</span>
+    it <span style=color:#e6db74>&#39;sets locked_at to current time&#39;</span> <span style=color:#66d9ef>do</span>
+      freeze_time <span style=color:#66d9ef>do</span>
+        expect { subject<span style=color:#f92672>.</span>lock! }<span style=color:#f92672>.</span>to change { subject<span style=color:#f92672>.</span>locked_at }<span style=color:#f92672>.</span>from(<span style=color:#66d9ef>nil</span>)<span style=color:#f92672>.</span>to(<span style=color:#66d9ef>Time</span><span style=color:#f92672>.</span>now<span style=color:#f92672>.</span>utc)
+      <span style=color:#66d9ef>end</span>
+    <span style=color:#66d9ef>end</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>Now when we run our model tests, we get two passing tests. One for each model!</p>
+<pre tabindex=0><code>$ bundle exec rspec spec/models/
+..
+
+Finished in 0.02916 seconds (files took 1.28 seconds to load)
+2 examples, 0 failures
+</code></pre><h3 id=parameters>Parameters</h3>
+<p>What happens if you need to pass some parameters that might be different in one context but not the other? Shared examples accept parameters! In the example below, I am creating an instance of the subject class and passing it into the shared example.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># spec/models/door_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>describe <span style=color:#66d9ef>Door</span>, <span style=color:#e6db74>type</span>: <span style=color:#e6db74>:model</span> <span style=color:#66d9ef>do</span>
+  it_behaves_like <span style=color:#e6db74>&#39;Lockable&#39;</span>, <span style=color:#66d9ef>Time</span><span style=color:#f92672>.</span>now<span style=color:#f92672>.</span>utc
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#75715e># spec/models/phone_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>describe <span style=color:#66d9ef>Phone</span>, <span style=color:#e6db74>type</span>: <span style=color:#e6db74>:model</span> <span style=color:#66d9ef>do</span>
+  it_behaves_like <span style=color:#e6db74>&#39;Lockable&#39;</span>, <span style=color:#66d9ef>Time</span><span style=color:#f92672>.</span>now<span style=color:#f92672>.</span>utc
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#75715e># spec/support/shared_examples/lockable_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>shared_examples <span style=color:#e6db74>&#39;Lockable&#39;</span> <span style=color:#66d9ef>do</span> <span style=color:#f92672>|</span>time<span style=color:#f92672>|</span>
+  subject { described_class<span style=color:#f92672>.</span>create  }
+
+  describe <span style=color:#e6db74>&#39;#lock&#39;</span> <span style=color:#66d9ef>do</span>
+    it <span style=color:#e6db74>&#39;sets locked_at to current time&#39;</span> <span style=color:#66d9ef>do</span>
+      freeze_time <span style=color:#66d9ef>do</span>
+        expect { subject<span style=color:#f92672>.</span>lock! }<span style=color:#f92672>.</span>to change { subject<span style=color:#f92672>.</span>locked_at }<span style=color:#f92672>.</span>from(<span style=color:#66d9ef>nil</span>)<span style=color:#f92672>.</span>to(time)
+      <span style=color:#66d9ef>end</span>
+    <span style=color:#66d9ef>end</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><h3 id=gotchas>Gotchas!</h3>
+<p>RSpec doesn&rsquo;t auto-load any files for you! You&rsquo;ll see that I&rsquo;ve put my shared examples in <code>spec/support/shared_examples/</code>. You need to tell RSpec to <code>require</code> this file.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># spec/rails_helper.rb</span>
+<span style=color:#66d9ef>Dir</span><span style=color:#f92672>[</span><span style=color:#e6db74>&#34;./spec/support/**/*.rb&#34;</span><span style=color:#f92672>].</span>sort<span style=color:#f92672>.</span>each { <span style=color:#f92672>|</span>f<span style=color:#f92672>|</span> require f  }
+</code></pre></div><h2 id=shared-contexts>Shared Contexts</h2>
+<p>What about times when you have to do a whole bunch of contextual setup in your tests? It gets super annoying when you have to do this setup twice. Shared contexts define code that will be evaluated before the tests run.</p>
+<p>Let&rsquo;s add a method called <code>locked?</code> to our module so that we can see if a door or phone is locked.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># app/models/concerns/lockable.rb</span>
+<span style=color:#66d9ef>module</span> Lockable
+  <span style=color:#66d9ef>extend</span> <span style=color:#66d9ef>ActiveSupport</span><span style=color:#f92672>::</span><span style=color:#66d9ef>Concern</span>
+
+  <span style=color:#75715e># Other code excluded for brevity.</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>locked?</span>
+    locked_at<span style=color:#f92672>.</span>present?
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>Now we want to add a shared context that creates a new <code>subject</code> for us. I&rsquo;m also going to define a <code>locked_at</code> <code>let</code> block here.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># spec/support/shared_contexts/locked_at.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>shared_context <span style=color:#e6db74>&#39;locked_at&#39;</span> <span style=color:#66d9ef>do</span>
+  let(<span style=color:#e6db74>:locked_at</span>) { <span style=color:#66d9ef>nil</span> }
+  subject { described_class<span style=color:#f92672>.</span>new(<span style=color:#e6db74>locked_at</span>: locked_at) }
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>And finally, lets add some tests to our shared examples for lockable:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#75715e># spec/support/shared_examples/lockable_spec.rb</span>
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>shared_examples <span style=color:#e6db74>&#39;Lockable&#39;</span> <span style=color:#66d9ef>do</span>
+  subject { described_class<span style=color:#f92672>.</span>create }
+
+  <span style=color:#75715e># Other code excluded for brevity.</span>
+
+  describe <span style=color:#e6db74>&#39;#locked?&#39;</span> <span style=color:#66d9ef>do</span>
+    context <span style=color:#e6db74>&#39;it is not locked&#39;</span> <span style=color:#66d9ef>do</span>
+      include_context <span style=color:#e6db74>&#39;locked_at&#39;</span>
+
+      it <span style=color:#e6db74>&#39;returns true&#39;</span> <span style=color:#66d9ef>do</span>
+        expect(subject<span style=color:#f92672>.</span>locked?)<span style=color:#f92672>.</span>to be <span style=color:#66d9ef>false</span>
+      <span style=color:#66d9ef>end</span>
+    <span style=color:#66d9ef>end</span>
+
+    context <span style=color:#e6db74>&#39;it is locked&#39;</span> <span style=color:#66d9ef>do</span>
+      include_context <span style=color:#e6db74>&#39;locked_at&#39;</span> <span style=color:#66d9ef>do</span>
+        let(<span style=color:#e6db74>:locked_at</span>) { <span style=color:#66d9ef>Time</span><span style=color:#f92672>.</span>now<span style=color:#f92672>.</span>utc }
+      <span style=color:#66d9ef>end</span>
+
+      it <span style=color:#e6db74>&#39;returns false&#39;</span> <span style=color:#66d9ef>do</span>
+        expect(subject<span style=color:#f92672>.</span>locked?)<span style=color:#f92672>.</span>to be <span style=color:#66d9ef>true</span>
+      <span style=color:#66d9ef>end</span>
+    <span style=color:#66d9ef>end</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>Here, the shared context is setting up a new subject for us. When we want to change one of the parameters of the context, we can use a block. In the test to ensure a subject is locked, you can see I have overridden the <code>locked_at</code> variable.</p>
+<h2 id=conclusion>Conclusion</h2>
+<p>I would choose carefully when implementing these though! Like <a href=https://www.sandimetz.com/blog/2016/1/20/the-wrong-abstraction>Sandi Metz says</a>, &ldquo;duplication is far cheaper than the wrong abstraction.&rdquo;</p>
+<p>If you find your shared contexts always have a block that overrides some defaults, or your shared examples require lots of parameters to set up, you might have the wrong abstraction.</p>
+<p>Shared contexts and examples are great for cleaning up your code when you need them though!</p>
+<p>You can find the code from this post over on GitHub: <a href=https://github.com/cassidycodes/rspec-examples>https://github.com/cassidycodes/rspec-examples</a></p>
+</div>
+<div class=pagination>
+<a href=/blog/2019-09-22-go-workshop/ class="left arrow">&#8592;</a>
+<a href=/blog/2019-12-14-rubo-cop-is-wrong/ class="right arrow">&#8594;</a>
+<a href=# class=top>Top</a>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:09.005195025 +0000 UTC m=+0.133940606">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>

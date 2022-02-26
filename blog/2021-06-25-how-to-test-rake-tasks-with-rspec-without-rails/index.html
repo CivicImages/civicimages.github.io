@@ -1,0 +1,129 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>How to Test Rake Tasks in RSpec Without Rails &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h2 class=nav-title>Cassidy Scheffer</h2>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=post>
+<div class=post-info>
+<span>Written by</span>
+Cassidy Scheffer
+<br>
+<span>on&nbsp;</span><time datetime="2021-02-25 13:51:51 -0500 -0500">February 25, 2021</time>
+</div>
+<h1 class=post-title>How to Test Rake Tasks in RSpec Without Rails</h1>
+<div class=post-line></div>
+<p>Recently in a Ruby project that does not use Rails, I had to write a Rake task. I wanted to be sure it was tested, but I couldn&rsquo;t figure out how to load the task in the test environment.</p>
+<p>Thanks to <a href=https://medium.com/@jelaniwoods/rspec-tests-for-rake-tasks-da7985896014>RSpec Tests for Rake Tasks</a> I was able to get the majority of the setup done. But that post is for Rails projects!</p>
+<p>Want the TL;DR? Skip to the code below and look for the line with <code>Rake::DefaultLoader.new.load</code>.</p>
+<h2 id=writing-a-rake-task>Writing a Rake Task</h2>
+<p>I put the tasks in <code>lib/tasks/</code> and organize them by namespace. So this task lives in <code>lib/tasks/authors.rake</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-rb data-lang=rb>namespace <span style=color:#e6db74>:authors</span> <span style=color:#66d9ef>do</span>
+  desc <span style=color:#e6db74>&#39;Migrate Author Names&#39;</span>
+  task <span style=color:#e6db74>:migrate_names</span> <span style=color:#66d9ef>do</span>
+    <span style=color:#66d9ef>Authors</span><span style=color:#f92672>.</span>find_each <span style=color:#66d9ef>do</span> <span style=color:#f92672>|</span>author<span style=color:#f92672>|</span>
+      author<span style=color:#f92672>.</span>update!(<span style=color:#e6db74>full_name</span>: <span style=color:#e6db74>&#34;</span><span style=color:#e6db74>#{</span>author<span style=color:#f92672>.</span>first_name<span style=color:#e6db74>}</span><span style=color:#e6db74> </span><span style=color:#e6db74>#{</span>author<span style=color:#f92672>.</span>last_name<span style=color:#e6db74>&#34;)
+</span><span style=color:#e6db74>    end
+</span><span style=color:#e6db74>  end
+</span><span style=color:#e6db74>end
+</span></code></pre></div><h2 id=loading-the-tasks-into-rake>Loading the Tasks Into Rake</h2>
+<p>This lets you run <code>rake authors:migrate_names</code>. Add this line to your Rakefile.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-rb data-lang=rb><span style=color:#66d9ef>Dir</span><span style=color:#f92672>.</span>glob(<span style=color:#e6db74>&#39;lib/tasks/*.rake&#39;</span>)<span style=color:#f92672>.</span>each { <span style=color:#f92672>|</span>r<span style=color:#f92672>|</span> load r }
+</code></pre></div><h2 id=loading-the-tasks-in-rspec>Loading the Tasks in RSpec</h2>
+<p>The code below does a few things:</p>
+<ol>
+<li>Creates a module that allows you to name a test <code>rake authors:create</code> and will load a <code>subject</code> named <code>task</code> that returns the rake task.</li>
+<li>Loads all the rake tasks into memory using <code>Rake::DefaultLoader</code>. Since we&rsquo;re not calling <code>rake</code> directly in the tests, we need this line to tell the tests where our tasks live.</li>
+<li>Adds metadata to any file in <code>spec/tasks</code> so that RSpec knows these are <code>task</code> tests and need the <code>TaskFormat</code> module loaded.</li>
+</ol>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby>require <span style=color:#e6db74>&#39;rake&#39;</span>
+
+<span style=color:#66d9ef>module</span> TaskFormat
+  <span style=color:#66d9ef>extend</span> <span style=color:#66d9ef>ActiveSupport</span><span style=color:#f92672>::</span><span style=color:#66d9ef>Concern</span>
+  included <span style=color:#66d9ef>do</span>
+    let(<span style=color:#e6db74>:task_name</span>) { self<span style=color:#f92672>.</span>class<span style=color:#f92672>.</span>top_level_description<span style=color:#f92672>.</span>sub(<span style=color:#e6db74>/\Arake /</span>, <span style=color:#e6db74>&#39;&#39;</span>) }
+    let(<span style=color:#e6db74>:tasks</span>) { <span style=color:#66d9ef>Rake</span><span style=color:#f92672>::</span><span style=color:#66d9ef>Task</span> }
+    <span style=color:#75715e># Make the Rake task available as `task` in your examples:</span>
+    subject(<span style=color:#e6db74>:task</span>) { tasks<span style=color:#f92672>[</span>task_name<span style=color:#f92672>]</span> }
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#66d9ef>RSpec</span><span style=color:#f92672>.</span>configure <span style=color:#66d9ef>do</span> <span style=color:#f92672>|</span>config<span style=color:#f92672>|</span>
+  config<span style=color:#f92672>.</span>before(<span style=color:#e6db74>:suite</span>) <span style=color:#66d9ef>do</span>
+    <span style=color:#66d9ef>Dir</span><span style=color:#f92672>.</span>glob(<span style=color:#e6db74>&#39;lib/tasks/*.rake&#39;</span>)<span style=color:#f92672>.</span>each { <span style=color:#f92672>|</span>r<span style=color:#f92672>|</span> <span style=color:#66d9ef>Rake</span><span style=color:#f92672>::</span><span style=color:#66d9ef>DefaultLoader</span><span style=color:#f92672>.</span>new<span style=color:#f92672>.</span>load r }
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#75715e># Tag Rake specs with `:task` metadata or put them in the spec/tasks dir</span>
+  config<span style=color:#f92672>.</span>define_derived_metadata(<span style=color:#e6db74>file_path</span>: <span style=color:#e6db74>%r{/spec/tasks/}</span>) <span style=color:#66d9ef>do</span> <span style=color:#f92672>|</span>metadata<span style=color:#f92672>|</span>
+    metadata<span style=color:#f92672>[</span><span style=color:#e6db74>:type</span><span style=color:#f92672>]</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>:task</span>
+  <span style=color:#66d9ef>end</span>
+
+  config<span style=color:#f92672>.</span>include <span style=color:#66d9ef>TaskFormat</span>, <span style=color:#e6db74>type</span>: <span style=color:#e6db74>:task</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><h2 id=writing-the-tests>Writing the Tests</h2>
+<p>Now lets write tests! The tests below use <a href=https://relishapp.com/rspec/rspec-mocks/v/3-10/docs/verifying-doubles>verifying doubles</a> to avoid database transactions, but how you write your tests is up to you!</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-rb data-lang=rb>require_relative <span style=color:#e6db74>&#39;../../support/tasks&#39;</span>
+
+describe <span style=color:#e6db74>&#39;rake authors:migrate_names&#39;</span>, <span style=color:#e6db74>type</span>: <span style=color:#e6db74>:task</span> <span style=color:#66d9ef>do</span>
+  let(<span style=color:#e6db74>:author_cls_double</span>) { class_double(<span style=color:#66d9ef>Author</span>)<span style=color:#f92672>.</span>as_stubbed_const(<span style=color:#e6db74>transfer_nested_constants</span>: <span style=color:#66d9ef>true</span>) }
+  let(<span style=color:#e6db74>:author_double</span>) { instance_double(<span style=color:#66d9ef>Author</span>, <span style=color:#e6db74>first_name</span>: <span style=color:#e6db74>&#39;Cassidy&#39;</span>, <span style=color:#e6db74>last_name</span>: <span style=color:#e6db74>&#39;Scheffer&#39;</span>) }
+  let(<span style=color:#e6db74>:expected_name</span>) { <span style=color:#e6db74>&#39;Cassidy Scheffer&#39;</span>
+
+  before <span style=color:#66d9ef>do</span>
+    allow(author_cls_double)<span style=color:#f92672>.</span>to receive(<span style=color:#e6db74>:find_each</span>)<span style=color:#f92672>.</span>and_yield(author_double)
+    allow(author_double)<span style=color:#f92672>.</span>to receive(<span style=color:#e6db74>:update!</span>)<span style=color:#f92672>.</span>with({ <span style=color:#e6db74>full_name</span>: expected_name })
+    task<span style=color:#f92672>.</span>execute
+  <span style=color:#66d9ef>end</span>
+
+  it <span style=color:#e6db74>&#39;updates the correct fields&#39;</span> <span style=color:#66d9ef>do</span>
+    expect(author_double)<span style=color:#f92672>.</span>to have_received(<span style=color:#e6db74>:update!</span>)<span style=color:#f92672>.</span>with({ <span style=color:#e6db74>full_name</span>: expected_name })
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div>
+</div>
+<div class=pagination>
+<a href=/blog/2020-05-15-factories-refactor-if-statements/ class="left arrow">&#8592;</a>
+<a href=/blog/2021-03-29-two-tools-for-diagnosing-slow-endpoints-in-rails/ class="right arrow">&#8594;</a>
+<a href=# class=top>Top</a>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:09.050206062 +0000 UTC m=+0.178951743">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>

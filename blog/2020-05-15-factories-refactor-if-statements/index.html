@@ -1,0 +1,234 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Using Factories in Ruby to Refactor if Statements &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h2 class=nav-title>Cassidy Scheffer</h2>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=post>
+<div class=post-info>
+<span>Written by</span>
+Cassidy Scheffer
+<br>
+<span>on&nbsp;</span><time datetime="2020-05-15 09:28:10 -0500 -0500">May 15, 2020</time>
+</div>
+<h1 class=post-title>Using Factories in Ruby to Refactor if Statements </h1>
+<div class=post-line></div>
+<p>In two separate code reviews this week I dug up a trusty old article that I use when trying to refactor conditionals in Ruby. I&rsquo;ve referred back to Ian Whitney&rsquo;s article <a href=http://designisrefactoring.com/2015/03/09/refactoring-away-a-conditional/>Refactoring away a conditional</a> so many times over the years.</p>
+<p>Today, I thought I&rsquo;d try explain this pattern myself based on some recent work.</p>
+<h2 id=the-problem-sending-messages>The Problem: Sending Messages</h2>
+<p>Before I start I should note that I didn&rsquo;t do the work I&rsquo;ve outlined below. Other talented engineers on my team implemented it! This post is inspired by our discussion in person and through code review. The code samples below are very much pseudo-code that I hammered out while writing this post and don&rsquo;t reflect the real code in our application.</p>
+<p>In our app at work, we have a messaging interface where a director can send messages to a predefined mailing list. Those mailing lists can be:</p>
+<ol>
+<li>All centres that they manage.</li>
+<li>One of the centres they manage.</li>
+<li>All of the customers for one centre.</li>
+</ol>
+<p>The director uses one interface to compose their message and chooses one of the three options above. When our application receives the request, it routes the data to the correct mailer to send the message to the recipients.</p>
+<p>Like any code base that&rsquo;s been around for a while, the three different branches here all had different interfaces. One called a Sidekiq worker, and two of them called a <code>MessageSender</code> service with different params.</p>
+<p>We were working on adding a new feature to this messaging system that scheduled messages to be sent at a future date. This meant that we needed to take some of the older code that was in a controller and put it in a background job.</p>
+<p>There was LOTS of opportunity for refactoring here, but we really needed to keep the scope of this work under control.</p>
+<p>So, how do we decide which of the existing message sending methods to use?</p>
+<h2 id=rough-draft-a-message-handler>Rough Draft: A Message Handler</h2>
+<p>The first step was to gather all the parts in one place. Have you ever cleaned out old desk drawers? Well, this is a similar process. We found all the related parts and group them together so we could best decide what to do with them.</p>
+<p>Here&rsquo;s an example of what that looked like. Note that I&rsquo;ve simplified this to keep it short.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ScheduledMessageHandler</span>
+  <span style=color:#66d9ef>attr_accessor</span> <span style=color:#e6db74>:scheduled_message</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>initialize</span>(id)
+    @scheduled_message <span style=color:#f92672>=</span> <span style=color:#66d9ef>ScheduledMessage</span><span style=color:#f92672>.</span>find(id)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>call</span>
+    <span style=color:#66d9ef>if</span> to_customers?
+      <span style=color:#66d9ef>CustomerMessageWorker</span><span style=color:#f92672>.</span>perform_async(customer_message_params)
+    <span style=color:#66d9ef>else</span>
+      <span style=color:#66d9ef>CentreMessageSenderService</span><span style=color:#f92672>.</span>call(centre_message_params)
+    <span style=color:#66d9ef>end</span>
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>private</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>to_customers?</span>
+    scheduled_message<span style=color:#f92672>.</span>send_to <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;Customers&#39;</span>
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>customer_message_params</span>
+    <span style=color:#75715e># Extract necessary params</span>
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>centre_message_params</span>
+    params <span style=color:#f92672>=</span> scheduled_message<span style=color:#f92672>.</span>slice(<span style=color:#e6db74>:message</span>, <span style=color:#e6db74>:subject</span>)
+    to_all_centres? ? params<span style=color:#f92672>.</span>merge(<span style=color:#e6db74>centre_ids</span>: centre_ids) : params<span style=color:#f92672>.</span>merge(<span style=color:#e6db74>centre_id</span>: centre_id)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>to_all_centres?</span>
+    scheduled_message<span style=color:#f92672>.</span>send_to <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;All Centres&#39;</span>
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>centre_ids</span>
+    <span style=color:#75715e># Determine centre ids</span>
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>centre_id</span>
+    <span style=color:#75715e># Determine centre id</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>Great! We have all the parts we need assembled in one place here. Lets take a look at what this is doing.</p>
+<h2 id=what-are-we-actually-doing>What are we actually doing?</h2>
+<p>At a glance, it looks like this class is deciding between two different classes, right?</p>
+<p>But! There&rsquo;s conditional hidden later on. Take a look at this flow chart. First we decide which class to use, and if we end up in the branch that sends to centres, we decide what the params should look like.</p>
+<p><img src=https://dev-to-uploads.s3.amazonaws.com/i/1qf8lbg60oxgemicuabr.jpg alt="A flow chart indicating that this class has three possible outcomes."></p>
+<p>A real good hint that this <code>ScheduledMessageHander</code> knows too much is that there are two separate methods that end in <code>params</code>, and only one of them will get used any time we call this class.</p>
+<h2 id=a-refactor-three-classes-with-the-same-interface>A Refactor: Three Classes with the Same Interface</h2>
+<p>Here&rsquo;s where we can use a Factory to refactor away this conditional. The trick, though, is that the factory needs to return an object with the same interface no matter which branch of the decision tree we end up at.</p>
+<p>Since we&rsquo;re trying to isolate these changes because we don&rsquo;t have time to pull apart all of the <code>CustomerMessageWorker</code> and <code>CentreMessageSenderService</code> classes, let&rsquo;s make sure they have the same interface.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CustomerMessageSender</span>
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>initialize</span>(message_params <span style=color:#f92672>=</span> {})
+    @message_params <span style=color:#f92672>=</span> message_params
+  <span style=color:#66d9ef>end</span>
+  
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>call</span>
+    <span style=color:#66d9ef>CustomerMessageWorker</span><span style=color:#f92672>.</span>perform_async(message_params)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>private</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>message_params</span>
+    <span style=color:#75715e># Extract necessary params</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>Ok, so now we have two <code>MessageSender</code> classes that have the same <code>call</code> interface. We can pass all of the <code>message_params</code> into the <code>CustomerMessageSender</code> and it knows which params it needs to call the worker.,</p>
+<p>Next, lets look how we use the <code>CentreMessageSenderService</code> class. We don&rsquo;t want to crack that open for a refactor, but we do know that it does two things: 1. Sends messages to one centre, and 2. Sends messages to many centres.</p>
+<p>Lets do something similar where we wrap the param extraction logic into two separate classes.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CentreMessageSender</span>
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>initialize</span>(message_params <span style=color:#f92672>=</span> {})
+    @message_params <span style=color:#f92672>=</span> message_params
+  <span style=color:#66d9ef>end</span>
+  
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>call</span>
+    <span style=color:#66d9ef>CentreMessageSenderService</span><span style=color:#f92672>.</span>call(message_params)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>private</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>message_params</span>
+    message_params<span style=color:#f92672>.</span>slice(<span style=color:#e6db74>:message</span>, <span style=color:#e6db74>:subject</span>)<span style=color:#f92672>.</span>merge(<span style=color:#e6db74>centre_id</span>: centre_id)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>centre_id</span>
+    <span style=color:#75715e># Determine centre_id</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CentresMessageSender</span>
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>initialize</span>(message_params <span style=color:#f92672>=</span> {})
+    @message_params <span style=color:#f92672>=</span> message_params
+  <span style=color:#66d9ef>end</span>
+  
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>call</span>
+    <span style=color:#66d9ef>CentreMessageSenderService</span><span style=color:#f92672>.</span>call(message_params)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>private</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>message_params</span>
+    message_params<span style=color:#f92672>.</span>slice(<span style=color:#e6db74>:message</span>, <span style=color:#e6db74>:subject</span>)<span style=color:#f92672>.</span>merge(<span style=color:#e6db74>centre_ids</span>: centre_ids)
+  <span style=color:#66d9ef>end</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>centre_ids</span>
+    <span style=color:#75715e># Determine centre_ids</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><h2 id=message-sender-factory-deciding-which-class-we-need>Message Sender Factory: Deciding which Class we Need</h2>
+<p>Now we have three classes that have the same interface. We can pass all of the message parameters into any one of the classes and they will extract the parameters they need and send the message!</p>
+<p>But, how do we pick the right class? Remember those conditionals we were talking about?</p>
+<p>Let&rsquo;s start by adding a <code>match?</code> method to each class that tells us if it matches the conditions for using that class.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CustomerMessageSender</span>
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>self</span><span style=color:#f92672>.</span><span style=color:#a6e22e>match?</span>(send_to)
+    send_to <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;Customers&#39;</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CentreMessageSender</span>
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>self</span><span style=color:#f92672>.</span><span style=color:#a6e22e>match?</span>(send_to)
+    send_to <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;Centre&#39;</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CentresMessageSender</span>
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>self</span><span style=color:#f92672>.</span><span style=color:#a6e22e>match?</span>(send_to)
+    send_to <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;All Centres&#39;</span>
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>And finally, lets make a factory class that can find the right message sender for us:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>MessageSenderFactory</span>
+  <span style=color:#66d9ef>MESSAGE_SENDERS</span> <span style=color:#f92672>=</span> <span style=color:#f92672>[</span>
+    <span style=color:#66d9ef>CustomerMessageSender</span>,
+    <span style=color:#66d9ef>CentreMessageSender</span>,
+    <span style=color:#66d9ef>CentresMessageSender</span>,
+  <span style=color:#f92672>]</span>
+
+  <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>self</span><span style=color:#f92672>.</span><span style=color:#a6e22e>build</span>(message_params)
+    send_to <span style=color:#f92672>=</span> message_params<span style=color:#f92672>[</span><span style=color:#e6db74>:send_to</span><span style=color:#f92672>]</span>
+    klass <span style=color:#f92672>=</span> <span style=color:#66d9ef>MESSAGE_SENDERS</span><span style=color:#f92672>.</span>find { <span style=color:#f92672>|</span>sender<span style=color:#f92672>|</span> sender<span style=color:#f92672>.</span>match?(send_to) }
+    klass<span style=color:#f92672>.</span>new(message_params)
+  <span style=color:#66d9ef>end</span>
+<span style=color:#66d9ef>end</span>
+</code></pre></div><p>Our factory class is now using the <code>match?</code> class method on each of the message sender classes to decide which class to use. It then initializes a new class and returns it to us.</p>
+<p>Here&rsquo;s what using it looks like now:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ruby data-lang=ruby>message_sender <span style=color:#f92672>=</span> <span style=color:#66d9ef>MessageSenderFactory</span><span style=color:#f92672>.</span>build(message_params)
+message_sender<span style=color:#f92672>.</span>call
+</code></pre></div><h2 id=notes-and-thoughts>Notes and Thoughts</h2>
+<p>The original article I referenced above is called &ldquo;Refactoring away a conditional&rdquo;, which seems correct because we&rsquo;re no longer using <code>if</code> <code>else</code> statements. But! We still have conditions, which live in the <code>match?</code> method. The difference here is that we&rsquo;ve flattened the decision tree. Now we make one decision with three possible outcomes rather than two decisions with three possible outcomes.</p>
+<h3 id=naming-is-hard>Naming is Hard!</h3>
+<p>The names in my examples don&rsquo;t actually match what is in our application. I find the similarity between <code>CentreMessageSender</code> and <code>CentresMessageSender</code> really hard to distinguish. Perhaps I could spend some time picking better names here.</p>
+<h2 id=deciding-when-to-refactor-is-hard>Deciding when to Refactor is Hard!</h2>
+<p>It is! I would have loved to revamp some of the classes behind this work. But the scope of that work would have been pretty significant in comparison to the project we were working on.</p>
+<p>Refactoring an old code base is a little like tidying your house one day at a time. Want to read about that? Here&rsquo;s an amazing thread from Sarah Mei about code hoarding:</p>
+</div>
+<div class=pagination>
+<a href=/blog/2019-12-14-rubo-cop-is-wrong/ class="left arrow">&#8592;</a>
+<a href=/blog/2021-06-25-how-to-test-rake-tasks-with-rspec-without-rails/ class="right arrow">&#8594;</a>
+<a href=# class=top>Top</a>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:09.030099956 +0000 UTC m=+0.158845637">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>

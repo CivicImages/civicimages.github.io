@@ -1,0 +1,170 @@
+<!doctype html><html lang=en-us>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Blogs &#183; Cassidy Scheffer</title>
+<link rel=stylesheet href=/css/style.css>
+<link rel=stylesheet href=/css/fonts.css>
+<link rel=icon href=favicon.ico>
+<link rel=icon type=image/png sizes=32x32 href=/images/favicon-32x32.png>
+<link rel=icon type=image/png sizes=16x16 href=/images/favicon-16x16.png>
+<link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png>
+<link href=/blog/index.xml rel=alternate type=application/rss+xml title="Cassidy Scheffer">
+</head>
+<body>
+<nav class=nav>
+<div class=nav-container>
+<a href=/>
+<h1 class=nav-title>Cassidy Scheffer</h1>
+</a>
+<ul>
+<li>
+<a href=/blog/>
+<span>Posts</span>
+</a>
+</li>
+<li>
+<a href=https://github.com/cassidycodes>
+<span>GitHub</span>
+</a>
+</li>
+<li>
+<a href=https://www.linkedin.com/in/cassidyscheffer/>
+<span>LinkedIn</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<main>
+<div class=catalogue>
+<a href=https://cassidy.codes/blog/2021-04-09-speeding-up-order-by/ class=catalogue-item>
+<div>
+<time datetime="2021-04-09 10:36:39 -0500 -0500" class=catalogue-time>April 9, 2021</time>
+<h2 class=catalogue-title>One WEIRD Trick for Speeding Up ORDER BY That You Probably Shouldn't Use</h2>
+<div class=catalogue-line></div>
+<p>
+I was digging into a performance issue at work recently and found THE WEIRDEST way of speeding up a query that uses ORDER BY. When testing against our replica database, I was getting results up to 100 times faster than before.
+&ldquo;Too good to be true!&rdquo; I thought. Well, it turns out that it is sort of too good to be true.
+The WEIRD Trick Here&rsquo;s an example query that was having issues.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2021-03-29-two-tools-for-diagnosing-slow-endpoints-in-rails/ class=catalogue-item>
+<div>
+<time datetime="2021-03-29 10:31:01 -0500 -0500" class=catalogue-time>March 29, 2021</time>
+<h2 class=catalogue-title>Two Tools for Diagnosing Slow Endpoints in Rails</h2>
+<div class=catalogue-line></div>
+<p>
+##Intro
+In general, I see two types of slow endpoints when I am doing performance work: endpoints that have bad code causing a slow response, and endpoints that have a bad query causing a slow response. This post will focus on endpoints that have bad code.
+Slow endpoints can be identified using an application performance monitor like NewRelic. These endpoints usually either have N + 1 queries, or they spend lots of time in Ruby.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2021-06-25-how-to-test-rake-tasks-with-rspec-without-rails/ class=catalogue-item>
+<div>
+<time datetime="2021-02-25 13:51:51 -0500 -0500" class=catalogue-time>February 25, 2021</time>
+<h2 class=catalogue-title>How to Test Rake Tasks in RSpec Without Rails</h2>
+<div class=catalogue-line></div>
+<p>
+Recently in a Ruby project that does not use Rails, I had to write a Rake task. I wanted to be sure it was tested, but I couldn&rsquo;t figure out how to load the task in the test environment.
+Thanks to RSpec Tests for Rake Tasks I was able to get the majority of the setup done. But that post is for Rails projects!
+Want the TL;DR? Skip to the code below and look for the line with Rake::DefaultLoader.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2020-05-15-factories-refactor-if-statements/ class=catalogue-item>
+<div>
+<time datetime="2020-05-15 09:28:10 -0500 -0500" class=catalogue-time>May 15, 2020</time>
+<h2 class=catalogue-title>Using Factories in Ruby to Refactor if Statements </h2>
+<div class=catalogue-line></div>
+<p>
+In two separate code reviews this week I dug up a trusty old article that I use when trying to refactor conditionals in Ruby. I&rsquo;ve referred back to Ian Whitney&rsquo;s article Refactoring away a conditional so many times over the years.
+Today, I thought I&rsquo;d try explain this pattern myself based on some recent work.
+The Problem: Sending Messages Before I start I should note that I didn&rsquo;t do the work I&rsquo;ve outlined below.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2019-12-14-rubo-cop-is-wrong/ class=catalogue-item>
+<div>
+<time datetime="2019-12-14 10:22:00 -0500 -0500" class=catalogue-time>December 14, 2019</time>
+<h2 class=catalogue-title>Don't Trust the Cops: Sometimes Rubocop is Wrong</h2>
+<div class=catalogue-line></div>
+<p>
+My team at work recently upgraded our version of Rubocop, the popular linter used to enforce good Ruby code style. With the upgrade we got a whole bunch of new suggestions and warnings about style violations.
+One of them that tripped us up was the Performance/Count rule.
+According to the Rubocop docs:
+This cop is used to identify usages of count on an Enumerable that follow calls to select or reject.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2019-09-28-rspec-shared-examples-contexts/ class=catalogue-item>
+<div>
+<time datetime="2019-09-28 12:54:41 -0400 -0400" class=catalogue-time>September 28, 2019</time>
+<h2 class=catalogue-title>Shared Examples and Contexts in RSpec</h2>
+<div class=catalogue-line></div>
+<p>
+When I first learned testing in Rails, I learned RSpec, but then in my last job, I wrote most of my tests in minitest. I enjoyed the challenge of learning a new test framework and found the tests super fast!
+But recently, I&rsquo;ve been working on a project in RSpec again and I have a renewed appreciation for it! In this post, I&rsquo;m going to talk about how to define and use shared examples and shared contexts in RSpec.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2019-09-22-go-workshop/ class=catalogue-item>
+<div>
+<time datetime="2019-09-22 21:37:54 -0400 -0400" class=catalogue-time>September 22, 2019</time>
+<h2 class=catalogue-title>Learning Go</h2>
+<div class=catalogue-line></div>
+<p>
+This weekend I went to a workshop to learn Go that was organized by Denise Yu. I wasn&rsquo;t able to stay for the whole thing, but I got so learn some fundamentals of Go. It was really nice to focus a day learning something new.
+GOPATH The first thing that caught me off guard was how Go looks for Go code. In the workshop, they glazed over this topic by suggesting that everyone start writing code in ~/go.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2019-08-06-favourite-debugging-trick/ class=catalogue-item>
+<div>
+<time datetime="2019-08-06 23:37:38 -0400 -0400" class=catalogue-time>August 6, 2019</time>
+<h2 class=catalogue-title>Favourite Debugging Trick</h2>
+<div class=catalogue-line></div>
+<p>
+Last week I wrote about some of my favourite debugging tools in Ruby. I forgot one trick that I find super useful!
+Today I was writing a script that would iterate through objects in an S3 bucket and group these objects by similar names. The naming structure looked like this:
+original.jpg tumb_original.jpg profile_original.jpg So all three of those images should get grouped together because they all come from orignal.jpg. But I got my name comparison muddled and something wasn&rsquo;t working right.
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2019-08-03-tmux-colour-theme/ class=catalogue-item>
+<div>
+<time datetime="2019-08-03 15:22:43 -0400 -0400" class=catalogue-time>August 3, 2019</time>
+<h2 class=catalogue-title>Creating a tmux Colour Theme</h2>
+<div class=catalogue-line></div>
+<p>
+I recently decided to use the Dracula in my coding environment. Love it or hate it, I&rsquo;ve been working with Vim and tmux for the past two years and I inherited my Vim and tmux configurations from someone else. I dove head first into this environment and got used to it pretty quickly, but I never spent much time configuring it.
+When I switched Vim over to Dracula, I immediately realized that I needed to change my tmux colours too!
+</p>
+</div>
+</a>
+<a href=https://cassidy.codes/blog/2019-08-01-debugging-in-rails/ class=catalogue-item>
+<div>
+<time datetime="2019-08-01 22:23:11 -0400 -0400" class=catalogue-time>August 1, 2019</time>
+<h2 class=catalogue-title>Debugging in Rails with Pry, `bundle open` and `puts`</h2>
+<div class=catalogue-line></div>
+<p>
+This week I got to dig into some debugging that I really enjoyed. Well, if you had asked me in the middle of it I might not have been having fun, but I found a solution! I used a handful of tools to approach debugging and they all gave me a little bit more information to solve the problem that I didn&rsquo;t have before.
+Here is a bit about each tool and what I find useful about it.
+</p>
+</div>
+</a>
+</div>
+<div class=pagination>
+<a href=/blog/page/2/ class="right arrow">&#8594;</a>
+<span>1</span>
+</div>
+</main>
+<footer>
+<span>
+&copy; <time datetime="2022-02-26 17:04:09.055709491 +0000 UTC m=+0.184455072">2022</time> Cassidy Scheffer. Made with <a href=https://gohugo.io>Hugo</a> using the <a href=https://github.com/EmielH/tale-hugo/>Tale</a> theme.
+</span>
+</footer>
+</body>
+</html>
